@@ -2,7 +2,7 @@
 
 require('dotenv').config()
 
-const {inspect} = require('util')
+const {inspect, promisify} = require('util')
 inspect.defaultOptions.colors = true
 
 const _ = require('lodash')
@@ -11,21 +11,30 @@ const rp = require('request-promise')
 const app = new (require('koa'))
 const router = new (require('koa-router'))
 
-const pg = require('pg')
-pg.defaults.parseInt8 = true
-pg.connect('postgres://postgres:password@localhost:5432/practicedocker')
+const port = process.env.PORT
 
-router.get('/test/:entity', async ctx => {
-  ctx.body = await
-       (ctx.params.entity == 'ct' && getCommonTransactions()
-    || ctx.params.entity == 'it' && getInternalTransactions()
-    || ctx.params.entity == 'b' && getBalance())
+;(async () => {
+  const {TransCom} = await require('./src/models')
 
-})
+  router.get('/test/:entity', async ctx => {
+    ctx.body = await
+      (ctx.params.entity == 'ct' && getCommonTransactions()
+        || ctx.params.entity == 'it' && getInternalTransactions()
+        || ctx.params.entity == 'b' && getBalance())
+  })
 
-app
-  .use(router.routes())
-  .listen(process.env.PORT)
+  router.get('/load', async ctx => {
+    const tx = await getCommonTransactions()
+    await TransCom.bulkCreate(tx)
+    ctx.body = await TransCom.findAll()
+  })
+
+  await promisify(app
+    .use(router.routes())
+    .listen.bind(app, port))()
+
+  console.log(`Server started on port ${port}`)
+})()
 
 
 async function getCommonTransactions (address) {
